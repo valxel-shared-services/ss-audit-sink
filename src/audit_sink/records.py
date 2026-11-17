@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-EVENT_TYPE = "vrixel.audit.v1"
+EVENT_TYPE = "valxel.audit.v1"
+# Producers from before the Vrixel -> Valxel rename still send the old type; both are the same schema.
+EVENT_TYPES = (EVENT_TYPE, "vrixel.audit.v1")
 
 
 @dataclass(frozen=True)
@@ -25,7 +27,7 @@ class Record:
             e = json.loads(self.raw)
         except ValueError as exc:
             raise ValueError(f"not JSON: {exc}") from exc
-        if not isinstance(e, dict) or e.get("type") != EVENT_TYPE or not isinstance(e.get("data"), dict):
+        if not isinstance(e, dict) or e.get("type") not in EVENT_TYPES or not isinstance(e.get("data"), dict):
             raise ValueError(f"not a {EVENT_TYPE} event")
         for f in ("id", "time"):
             if not e.get(f):

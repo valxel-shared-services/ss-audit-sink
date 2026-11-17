@@ -99,7 +99,7 @@ def create_app(workers: list[Worker], *, verify_conn: Any = None, stale_after: f
         for t in threads:
             t.join(30)
 
-    app = FastAPI(title="Vrixel audit sink", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Valxel audit sink", lifespan=lifespan, docs_url=None, redoc_url=None)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

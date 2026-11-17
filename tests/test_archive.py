@@ -60,7 +60,7 @@ def test_records_are_archived_per_partition_as_locked_files(s3: Any) -> None:
     assert obj["Metadata"]["records"] == "3"
     lines = [json.loads(x) for x in gzip.decompress(obj["Body"].read()).splitlines()]
     assert [x["offset"] for x in lines] == [0, 1, 2] and lines[2]["value"] == "broken"  # kept as sent
-    assert lines[0]["value"]["type"] == "vrixel.audit.v1"
+    assert lines[0]["value"]["type"] == "valxel.audit.v1"
     clock.t = 61
     assert a.due() == [("audit.v1", 1)]  # old enough
     assert a.due(force=True) == [("audit.v1", 1)]

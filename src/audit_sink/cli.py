@@ -1,10 +1,14 @@
-"""audit-sink run | setup | verify | restore --topic T
+"""audit-sink run | setup | verify | restore --topic T | replay-rejects --topic T [--dry-run]
 
 run       consume the audit topics into the configured destinations (the container's command)
 setup     create the Postgres tables and append-only triggers
 verify    recompute every partition's hash chain; exits 1 on a break
 restore   replay a topic from the object-storage archive into Postgres (rows already there are
           skipped), e.g. after losing the database
+replay-rejects
+          publish again the rejects that are audit events after all (refused only for an event type
+          the sink didn't know yet): they join the chain at new offsets; each is marked replayed
+          once the broker acknowledges it, so running it twice sends nothing twice
 """
 
 from __future__ import annotations
@@ -26,6 +30,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("verify")
     r = sub.add_parser("restore")
     r.add_argument("--topic", required=True)
+    rp = sub.add_parser("replay-rejects")
+    rp.add_argument("--topic", required=True)
+    rp.add_argument("--dry-run", action="store_true")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format='{"log.level":"%(levelname)s","message":"%(message)s"}')
     settings = Settings()
@@ -63,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         return 0 if ok else 1
+    if args.cmd == "replay-rejects":
+        return replay_rejects(conn, settings, args.topic, dry_run=args.dry_run)
     from .archive import read
 
     arch = archive_sink(settings)
@@ -78,6 +87,40 @@ def main(argv: list[str] | None = None) -> int:
         _add(total, sink.write(batch))
     print(json.dumps(total.__dict__))
     return 0
+
+
+def replay_rejects(conn, settings: Settings, topic: str, *, dry_run: bool, producer=None) -> int:  # type: ignore[no-untyped-def]
+    found = postgres.replayable(conn, topic)
+    if dry_run or not found:
+        print(json.dumps({"topic": topic, "replayable": len(found), "replayed": 0}))
+        return 0
+    if producer is None:  # pragma: no cover - a real broker
+        from confluent_kafka import Producer
+
+        if not settings.kafka_bootstrap:
+            raise RuntimeError("Set AUDIT_SINK_KAFKA_BOOTSTRAP to replay rejects")
+        producer = Producer(
+            {
+                "bootstrap.servers": settings.kafka_bootstrap,
+                **settings.kafka_config,
+                "acks": "all",
+                "enable.idempotence": True,
+            }
+        )
+    done: list[tuple[int, int]] = []
+    failed: list[str] = []
+    for partition, offset, raw in found:
+
+        def ack(err, _msg, at=(partition, offset)) -> None:  # type: ignore[no-untyped-def]
+            (failed if err else done).append(str(err) if err else at)  # type: ignore[arg-type]
+
+        producer.produce(topic, value=raw, on_delivery=ack)
+    producer.flush(60)
+    postgres.mark_replayed(conn, topic, done)
+    print(
+        json.dumps({"topic": topic, "replayable": len(found), "replayed": len(done), "failed": len(failed)})
+    )
+    return 1 if failed or len(done) < len(found) else 0
 
 
 def _add(total: postgres.Written, w: postgres.Written) -> None:

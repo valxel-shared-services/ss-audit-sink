@@ -1,6 +1,6 @@
 # Audit sink
 
-A Vrixel shared service. It reads a product's audit topic from Kafka and keeps two copies:
+A Valxel shared service. It reads a product's audit topic from Kafka and keeps two copies:
 
 - **Postgres**: queryable, append-only and hash-chained, for investigations and access reports.
 - **Object storage**: gzipped files under S3 Object Lock, the backup that no one can delete before
@@ -21,7 +21,7 @@ expect of either destination (seven days is a sensible floor).
 
 ## Records
 
-Services publish [CloudEvents](https://cloudevents.io) of type `vrixel.audit.v1` with the
+Services publish [CloudEvents](https://cloudevents.io) of type `valxel.audit.v1` (or, from producers older than the rename, `vrixel.audit.v1`) with the
 templates' `audit.py`: who (`actor`, and `on_behalf_of` when an agent acts for a person), what
 (`action`), which records (`resource.type`, `resource.ids`), the `outcome` and `reason`, the
 `trace_id` of the request, and the product's `data_class`. Records hold ids, never field values.
@@ -66,6 +66,8 @@ uv run audit-sink setup      # create the tables and triggers (run also does thi
 uv run audit-sink run        # consume; serves /healthz, /readyz, /metrics, /verify on :8080
 uv run audit-sink verify     # exits 1 if any partition's chain is broken
 uv run audit-sink restore --topic emr.audit.v1   # rebuild Postgres from the archive
+uv run audit-sink replay-rejects --topic emr.audit.v1 --dry-run   # how many rejects are audit events after all
+uv run audit-sink replay-rejects --topic emr.audit.v1   # publish them again: they join the chain at new offsets
 ```
 
 | Variable | Default | |
