@@ -59,7 +59,7 @@ def test_messages_that_arent_audit_events_are_kept_aside(db: Any) -> None:
     reasons = [r[0] for r in db.execute('SELECT reason FROM audit_rejects ORDER BY "offset"')]
     assert (
         reasons[0].startswith("not JSON")
-        and "not a vrixel.audit.v1 event" in reasons[1]
+        and "not a valxel.audit.v1 event" in reasons[1]
         and reasons[2] == "missing id"
     )
     assert s.write([record(0, b"not json")]).duplicates == 1

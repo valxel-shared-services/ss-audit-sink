@@ -64,3 +64,69 @@ def test_workers_get_one_consumer_group_per_destination(db: Any, monkeypatch: py
         assert all(w.poll_batch == 7 for w in workers)
         for w in workers:
             w.consumer.close()
+
+
+def test_old_and_new_event_types_are_both_audit_events() -> None:
+    import json
+
+    from .conftest import event
+
+    for kind in ("valxel.audit.v1", "vrixel.audit.v1"):
+        assert record(0, json.dumps({**event(), "type": kind}).encode()).event()["type"] == kind
+    with pytest.raises(ValueError, match=r"not a valxel\.audit\.v1 event"):
+        record(0, json.dumps({**event(), "type": "other.v1"}).encode()).event()
+
+
+class FakeProducer:
+    def __init__(self, fail: bool = False) -> None:
+        self.sent: list[bytes] = []
+        self.fail, self.pending = fail, []
+
+    def produce(self, topic: str, value: bytes, on_delivery: Any) -> None:
+        self.sent.append(value)
+        self.pending.append(on_delivery)
+
+    def flush(self, timeout: float) -> int:
+        for cb in self.pending:
+            cb("broker down" if self.fail else None, None)
+        self.pending = []
+        return 0
+
+
+def test_rejects_that_are_audit_events_are_replayed_once(
+    db: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    """Events refused before the sink knew valxel.audit.v1 go back on the topic, never into the chain
+    at their old offsets (that would fork it)."""
+    import json
+
+    from audit_sink import postgres
+    from audit_sink.cli import replay_rejects
+
+    from .conftest import event
+
+    env(monkeypatch, db)
+    assert main(["setup"]) == 0
+    sink = postgres.PostgresSink(db)
+    # As the old sink saw them: a valxel event refused for its type, and real junk.
+    for offset, raw, reason in (
+        (5, json.dumps({**event(), "type": "valxel.audit.v1"}).encode(), "not a vrixel.audit.v1 event"),
+        (6, b"junk", "not JSON: x"),
+    ):
+        db.execute(
+            'INSERT INTO audit_rejects (topic, partition, "offset", reason, raw) VALUES (%s, 0, %s, %s, %s)',
+            ("audit.v1", offset, reason, raw),
+        )
+    sink.write([record(i) for i in range(3)])
+    assert main(["replay-rejects", "--topic", "audit.v1", "--dry-run"]) == 0
+    assert '"replayable": 1, "replayed": 0' in capsys.readouterr().out
+    down = FakeProducer(fail=True)
+    assert replay_rejects(db, Settings(), "audit.v1", dry_run=False, producer=down) == 1
+    assert len(postgres.replayable(db, "audit.v1")) == 1  # not marked: it'll go next time
+    up = FakeProducer()
+    assert replay_rejects(db, Settings(), "audit.v1", dry_run=False, producer=up) == 0
+    assert json.loads(up.sent[0])["type"] == "valxel.audit.v1"
+    assert postgres.replayable(db, "audit.v1") == []
+    # When the sink reads it back at its new offset, it joins the chain.
+    sink.write([record(9, up.sent[0])])
+    assert main(["verify"]) == 0

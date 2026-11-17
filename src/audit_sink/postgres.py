@@ -8,6 +8,9 @@ DELETE and TRUNCATE; grant the sink's database role INSERT and SELECT only, and 
 ownership with a separate role.
 
 Messages that aren't audit events are kept in `audit_rejects` with the reason, not dropped.
+`replayable` finds the ones refused only for an event type the sink now accepts (valxel.audit.v1
+before this sink knew it), so `audit-sink replay-rejects` can publish them to the topic again: they
+join the chain at new offsets, never rewriting it.
 """
 
 from __future__ import annotations
@@ -66,6 +69,7 @@ SCHEMA = (
         PRIMARY KEY (topic, partition, "offset")
     )
     """,
+    "ALTER TABLE audit_rejects ADD COLUMN IF NOT EXISTS replayed_at timestamptz",
     """
     CREATE OR REPLACE FUNCTION audit_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
     BEGIN
@@ -220,3 +224,31 @@ def _rows(conn: psycopg.Connection[Any], topic: str, partition: int) -> Iterator
 def partitions(conn: psycopg.Connection[Any]) -> list[tuple[str, int]]:
     rows = conn.execute("SELECT DISTINCT topic, partition FROM audit_events ORDER BY 1, 2").fetchall()
     return [(str(t), int(p)) for t, p in rows]
+
+
+def replayable(conn: psycopg.Connection[Any], topic: str) -> list[tuple[int, int, bytes]]:
+    """Rejects on `topic` that are audit events now (refused only for their type), not yet replayed:
+    (partition, offset, raw), oldest first."""
+    rows = conn.execute(
+        'SELECT partition, "offset", raw FROM audit_rejects WHERE topic = %s AND replayed_at IS NULL'
+        ' AND reason LIKE %s ORDER BY received_at, partition, "offset"',
+        (topic, "not a %audit.v1 event"),
+    ).fetchall()
+    out = []
+    for partition, offset, raw in rows:
+        try:
+            Record(topic, int(partition), int(offset), 0, "", bytes(raw)).event()
+        except ValueError:
+            continue  # still not an audit event
+        out.append((int(partition), int(offset), bytes(raw)))
+    return out
+
+
+def mark_replayed(conn: psycopg.Connection[Any], topic: str, done: list[tuple[int, int]]) -> None:
+    with conn.transaction():
+        for partition, offset in done:
+            conn.execute(
+                "UPDATE audit_rejects SET replayed_at = now()"
+                ' WHERE topic = %s AND partition = %s AND "offset" = %s',
+                (topic, partition, offset),
+            )

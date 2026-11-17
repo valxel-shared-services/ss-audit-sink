@@ -1,7 +1,7 @@
 [project]
 name = "audit-sink"
 version = "0.1.0"
-description = "Vrixel shared audit sink: copies a product's audit topic from Kafka into an append-only, hash-chained Postgres table and archives it to object storage."
+description = "Valxel shared audit sink: copies a product's audit topic from Kafka into an append-only, hash-chained Postgres table and archives it to object storage."
 requires-python = ">=3.12"
 dependencies = [
   "confluent-kafka>=2.16,<3",

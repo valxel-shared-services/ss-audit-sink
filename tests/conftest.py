@@ -18,7 +18,7 @@ def event(action: str = "tool.find_patient", ids: tuple[str, ...] = ("p-1",), **
         "specversion": "1.0",
         "id": str(uuid.uuid4()),
         "source": "emr/care",
-        "type": "vrixel.audit.v1",
+        "type": "valxel.audit.v1",
         "time": "2026-11-04T06:00:00+00:00",
         "subject": f"patient/{','.join(ids)}",
         "datacontenttype": "application/json",
