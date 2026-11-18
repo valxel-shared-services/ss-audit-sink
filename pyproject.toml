@@ -12,6 +12,7 @@ dependencies = [
   "pydantic>=2.14,<3",
   "pydantic-settings>=2.16,<3",
   "prometheus-client>=0.26,<1",
+  "jsonschema>=4.20,<5",
 ]
 
 [project.scripts]
@@ -26,6 +27,7 @@ dev = [
     "moto[s3]>=5.2,<6",
     "boto3-stubs[s3]>=1.43",
     "httpx>=0.28,<1",
+    "types-jsonschema",
 ]
 
 [build-system]
