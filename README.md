@@ -26,8 +26,15 @@ templates' `audit.py`: who (`actor`, and `on_behalf_of` when an agent acts for a
 (`action`), which records (`resource.type`, `resource.ids`), the `outcome` and `reason`, the
 `trace_id` of the request, and the product's `data_class`. Records hold ids, never field values.
 
-Messages that aren't valid audit events are kept in `audit_rejects` with the reason, and
-archived as sent; nothing is dropped.
+The event's contract is a JSON Schema this repo owns:
+[`src/audit_sink/valxel.audit.v1.schema.json`](src/audit_sink/valxel.audit.v1.schema.json)
+(`x-version` 1.0.0). Every producer keeps a byte-identical copy at
+`contracts/audit/valxel.audit.v1.schema.json` and tests the events it builds against it; the Valxel
+SDLC checks daily that each copy is still this one. A change a producer could fail is a new major
+version and a new event type, never an edit to this file.
+
+Messages that aren't valid audit events, schema included, are kept in `audit_rejects` with the
+reason, and archived as sent; nothing is dropped.
 
 ## Tamper evidence
 

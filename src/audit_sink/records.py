@@ -5,11 +5,42 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import cache
+from importlib import resources
 from typing import Any
 
 EVENT_TYPE = "valxel.audit.v1"
 # Producers from before the Vrixel -> Valxel rename still send the old type; both are the same schema.
 EVENT_TYPES = (EVENT_TYPE, "vrixel.audit.v1")
+# The event's contract. The sink owns it; every producer keeps a byte-identical copy at
+# contracts/audit/valxel.audit.v1.schema.json and tests its events against it, and the Valxel SDLC
+# checks daily that each copy is this one (its template contract, audit_event).
+SCHEMA_FILE = "valxel.audit.v1.schema.json"
+
+
+def schema() -> dict[str, Any]:
+    loaded: dict[str, Any] = json.loads(
+        resources.files("audit_sink").joinpath(SCHEMA_FILE).read_text(encoding="utf-8")
+    )
+    return loaded
+
+
+@cache
+def _validator() -> Any:
+    from jsonschema import Draft202012Validator
+
+    return Draft202012Validator(schema())
+
+
+def problems(event: Any) -> list[str]:
+    """Where an event breaks the schema, one line each (empty when it doesn't)."""
+    if isinstance(event, dict) and event.get("type") in EVENT_TYPES:
+        event = {**event, "type": EVENT_TYPE}
+    out = []
+    for err in sorted(_validator().iter_errors(event), key=lambda e: list(e.absolute_path)):
+        where = "/".join(str(p) for p in err.absolute_path) or "event"
+        out.append(f"{where}: {err.message}"[:200])
+    return out
 
 
 @dataclass(frozen=True)
@@ -36,6 +67,9 @@ class Record:
             datetime.fromisoformat(str(e["time"]))
         except ValueError as exc:
             raise ValueError("time is not an ISO 8601 timestamp") from exc
+        found = problems(e)
+        if found:
+            raise ValueError("breaks the schema: " + "; ".join(found[:3]))
         return e
 
     def line(self) -> dict[str, Any]:
