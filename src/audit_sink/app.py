@@ -57,7 +57,8 @@ def connect(settings: Settings) -> Any:
     if not settings.database_url:
         raise RuntimeError("Set AUDIT_SINK_DATABASE_URL")
     conn = psycopg.connect(settings.database_url, autocommit=True)
-    postgres.setup(conn)
+    if settings.setup:
+        postgres.setup(conn)
     return conn
 
 

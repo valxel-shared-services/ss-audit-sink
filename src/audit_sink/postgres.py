@@ -91,6 +91,18 @@ def setup(conn: psycopg.Connection[Any]) -> None:
             conn.execute(stmt)
 
 
+def grant(conn: psycopg.Connection[Any], role: str) -> None:
+    """What the sink's writer role may do, and nothing more: read and add audit rows, and mark a
+    reject as replayed. The tables, triggers and this grant stay with their owner, so turning the
+    triggers off takes a different credential."""
+    from psycopg import sql
+
+    who = sql.Identifier(role)
+    with conn.transaction():
+        conn.execute(sql.SQL("GRANT SELECT, INSERT ON audit_events TO {}").format(who))
+        conn.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE (replayed_at) ON audit_rejects TO {}").format(who))
+
+
 @dataclass
 class Written:
     events: int = 0

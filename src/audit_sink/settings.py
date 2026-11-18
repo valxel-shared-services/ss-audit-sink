@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     destinations: list[str] = Field(default_factory=lambda: ["postgres", "archive"])
     # Postgres: the queryable, hash-chained copy.
     database_url: str = ""
+    # Create the tables and triggers on start. Turn off when the sink runs as a writer role that
+    # may only add rows (`audit-sink setup --grant-to <role>`, run as the tables' owner).
+    setup: bool = True
     # Object storage (S3 API: AWS S3, MinIO, Ceph, GCS interoperability): the backup.
     archive_bucket: str = ""
     archive_prefix: str = "audit/"
