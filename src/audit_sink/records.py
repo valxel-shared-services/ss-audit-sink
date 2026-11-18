@@ -19,9 +19,7 @@ SCHEMA_FILE = "valxel.audit.v1.schema.json"
 
 
 def schema() -> dict[str, Any]:
-    loaded: dict[str, Any] = json.loads(
-        resources.files("audit_sink").joinpath(SCHEMA_FILE).read_text(encoding="utf-8")
-    )
+    loaded: dict[str, Any] = json.loads((Path(__file__).parent / SCHEMA_FILE).read_text(encoding="utf-8"))
     return loaded
 
 
