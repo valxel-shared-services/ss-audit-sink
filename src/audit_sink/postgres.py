@@ -91,6 +91,28 @@ def setup(conn: psycopg.Connection[Any]) -> None:
             conn.execute(stmt)
 
 
+def grant(conn: psycopg.Connection[Any], role: str, password: str = "") -> None:
+    """What the sink's writer role may do, and nothing more: read and add audit rows, and mark a
+    reject as replayed. The tables, triggers and this grant stay with their owner, so turning the
+    triggers off takes a different credential. With a password, the role is created to log in
+    (or its password reset)."""
+    from psycopg import sql
+
+    # Role names and passwords can't be bound parameters in DDL; psycopg.sql quotes them
+    # (Identifier, Literal) and joins the parts, so no SQL is built from strings.
+    def ddl(*parts: sql.Composable) -> sql.Composed:
+        return sql.SQL(" ").join(parts)
+
+    who = sql.Identifier(role)
+    with conn.transaction():
+        if password:
+            exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
+            verb = sql.SQL("ALTER ROLE") if exists else sql.SQL("CREATE ROLE")
+            conn.execute(ddl(verb, who, sql.SQL("WITH LOGIN PASSWORD"), sql.Literal(password)))
+        conn.execute(ddl(sql.SQL("GRANT SELECT, INSERT ON audit_events TO"), who))
+        conn.execute(ddl(sql.SQL("GRANT SELECT, INSERT, UPDATE (replayed_at) ON audit_rejects TO"), who))
+
+
 @dataclass
 class Written:
     events: int = 0

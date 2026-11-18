@@ -130,3 +130,35 @@ def test_rejects_that_are_audit_events_are_replayed_once(
     # When the sink reads it back at its new offset, it joins the chain.
     sink.write([record(9, up.sent[0])])
     assert main(["verify"]) == 0
+
+
+def test_setup_grants_the_writer_role_and_the_writer_skips_setup(
+    db: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    env(monkeypatch, db)
+    role = f"w_{db.info.dbname[-6:]}"
+    try:
+        monkeypatch.setenv("AUDIT_SINK_WRITER_PASSWORD", "s3cret-writer")
+        monkeypatch.setenv("AUDIT_SINK_SETUP", "false")  # setup still sets up: it's what it's for
+        assert main(["setup", "--grant-to", role]) == 0
+        assert f"{role} may add rows" in capsys.readouterr().out
+        granted = db.execute(
+            "SELECT privilege_type FROM information_schema.role_table_grants"
+            " WHERE grantee = %s AND table_name = 'audit_events' ORDER BY 1",
+            (role,),
+        ).fetchall()
+        assert [g[0] for g in granted] == ["INSERT", "SELECT"]
+        assert db.execute("SELECT rolcanlogin FROM pg_roles WHERE rolname = %s", (role,)).fetchone()[0]
+        assert main(["setup", "--grant-to", role]) == 0  # again: the password is reset, nothing fails
+        db.execute("DROP TRIGGER audit_events_no_truncate ON audit_events")
+        app_mod.connect(Settings(database_url=url_of(db), setup=False)).close()
+        assert (
+            db.execute(
+                "SELECT count(*) FROM pg_trigger WHERE tgname = 'audit_events_no_truncate'"
+            ).fetchone()[0]
+            == 0
+        )  # not set up again by a writer
+    finally:
+        if db.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone():
+            db.execute(f"DROP OWNED BY {role}")
+        db.execute(f"DROP ROLE IF EXISTS {role}")

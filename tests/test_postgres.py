@@ -88,3 +88,32 @@ def test_verify_finds_a_changed_or_missing_row(db: Any) -> None:
     db.execute("""DELETE FROM audit_events WHERE "offset" = 2""")
     n, broken = postgres.verify(db, "audit.v1", 0)
     assert broken is not None and broken.offset == 3 and "missing" in broken.reason
+
+
+def test_the_writer_role_adds_rows_but_cannot_change_the_tables_or_their_triggers(db: Any) -> None:
+    role = f"writer_{db.info.dbname[-6:]}"
+    db.execute(f"DROP ROLE IF EXISTS {role}")
+    db.execute(f"CREATE ROLE {role}")
+    try:
+        postgres.setup(db)
+        postgres.grant(db, role)
+        db.execute(f"SET ROLE {role}")
+        db.execute(
+            'INSERT INTO audit_rejects (topic, partition, "offset", reason, raw) VALUES (%s, 0, 1, %s, %s)',
+            ("t", "bad", b"x"),
+        )
+        db.execute("UPDATE audit_rejects SET replayed_at = now()")
+        assert db.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 0
+        for stmt in (
+            "DROP TRIGGER audit_events_no_change ON audit_events",
+            "UPDATE audit_rejects SET reason = 'x'",
+            "TRUNCATE audit_rejects",
+        ):
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                db.execute(stmt)
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            postgres.setup(db)
+    finally:
+        db.execute("RESET ROLE")
+        db.execute(f"DROP OWNED BY {role}")
+        db.execute(f"DROP ROLE {role}")

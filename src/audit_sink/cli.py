@@ -26,7 +26,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="audit-sink")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("run")
-    sub.add_parser("setup")
+    sp = sub.add_parser("setup")
+    sp.add_argument("--grant-to", default="", help="a writer role that may only add audit rows")
     sub.add_parser("verify")
     r = sub.add_parser("restore")
     r.add_argument("--topic", required=True)
@@ -50,9 +51,11 @@ def main(argv: list[str] | None = None) -> int:
             log_config=None,
         )
         return 0
-    conn = connect(settings)
+    conn = connect(settings.model_copy(update={"setup": True}) if args.cmd == "setup" else settings)
     if args.cmd == "setup":
-        print("audit tables ready")
+        if args.grant_to:
+            postgres.grant(conn, args.grant_to, settings.writer_password)
+        print("audit tables ready" + (f"; {args.grant_to} may add rows" if args.grant_to else ""))
         return 0
     if args.cmd == "verify":
         ok = True

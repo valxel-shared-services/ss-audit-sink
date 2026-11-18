@@ -34,9 +34,10 @@ archived as sent; nothing is dropped.
 - Each row's `hash` is SHA-256 over the previous row's hash in the same partition, the row's
   Kafka coordinates and the event, so a changed, missing or reordered row breaks the chain from
   there on. `GET /verify` and `audit-sink verify` recompute every partition's chain.
-- Triggers refuse `UPDATE`, `DELETE` and `TRUNCATE` on `audit_events`. Grant the sink's role
-  `INSERT, SELECT` only and keep table ownership with a separate role, so disabling the triggers
-  takes a different credential.
+- Triggers refuse `UPDATE`, `DELETE` and `TRUNCATE` on `audit_events`. Keep table ownership with
+  a separate role and run the sink as a writer that may only add rows, so disabling the triggers
+  takes a different credential: as the owner, `audit-sink setup --grant-to <writer>`; then run the
+  sink as the writer with `AUDIT_SINK_SETUP=false`.
 - Archive files are written with Object Lock (`COMPLIANCE` mode by default) and kept for
   `AUDIT_SINK_ARCHIVE_RETENTION_DAYS` (six years by default, the HIPAA documentation period).
   The bucket must be created with Object Lock enabled.
@@ -78,6 +79,8 @@ uv run audit-sink replay-rejects --topic emr.audit.v1   # publish them again: th
 | `AUDIT_SINK_GROUP_PREFIX` | `audit-sink` | Consumer groups are `<prefix>-postgres` and `<prefix>-archive` |
 | `AUDIT_SINK_DESTINATIONS` | `["postgres","archive"]` | Run them in one process, or one per deployment |
 | `AUDIT_SINK_DATABASE_URL` | | The product's audit database |
+| `AUDIT_SINK_SETUP` | `true` | Create tables and triggers on start; `false` for a writer role |
+| `AUDIT_SINK_WRITER_PASSWORD` | | With `setup --grant-to`: creates the writer as a login role (or resets its password) |
 | `AUDIT_SINK_ARCHIVE_BUCKET`, `AUDIT_SINK_ARCHIVE_PREFIX` | `audit/` | S3 API bucket (AWS S3, MinIO, Ceph) |
 | `AUDIT_SINK_ARCHIVE_ENDPOINT_URL`, `AUDIT_SINK_ARCHIVE_REGION` | | For MinIO and other S3-compatible stores; credentials come from the standard AWS variables or workload identity |
 | `AUDIT_SINK_ARCHIVE_LOCK_MODE` | `COMPLIANCE` | `GOVERNANCE`, or empty to use the bucket's default |
