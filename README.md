@@ -80,6 +80,7 @@ uv run audit-sink replay-rejects --topic emr.audit.v1   # publish them again: th
 | `AUDIT_SINK_DESTINATIONS` | `["postgres","archive"]` | Run them in one process, or one per deployment |
 | `AUDIT_SINK_DATABASE_URL` | | The product's audit database |
 | `AUDIT_SINK_SETUP` | `true` | Create tables and triggers on start; `false` for a writer role |
+| `AUDIT_SINK_WRITER_PASSWORD` | | With `setup --grant-to`: creates the writer as a login role (or resets its password) |
 | `AUDIT_SINK_ARCHIVE_BUCKET`, `AUDIT_SINK_ARCHIVE_PREFIX` | `audit/` | S3 API bucket (AWS S3, MinIO, Ceph) |
 | `AUDIT_SINK_ARCHIVE_ENDPOINT_URL`, `AUDIT_SINK_ARCHIVE_REGION` | | For MinIO and other S3-compatible stores; credentials come from the standard AWS variables or workload identity |
 | `AUDIT_SINK_ARCHIVE_LOCK_MODE` | `COMPLIANCE` | `GOVERNANCE`, or empty to use the bucket's default |

@@ -137,8 +137,8 @@ def test_setup_grants_the_writer_role_and_the_writer_skips_setup(
 ) -> None:
     env(monkeypatch, db)
     role = f"w_{db.info.dbname[-6:]}"
-    db.execute(f"CREATE ROLE {role}")
     try:
+        monkeypatch.setenv("AUDIT_SINK_WRITER_PASSWORD", "s3cret-writer")
         monkeypatch.setenv("AUDIT_SINK_SETUP", "false")  # setup still sets up: it's what it's for
         assert main(["setup", "--grant-to", role]) == 0
         assert f"{role} may add rows" in capsys.readouterr().out
@@ -148,6 +148,8 @@ def test_setup_grants_the_writer_role_and_the_writer_skips_setup(
             (role,),
         ).fetchall()
         assert [g[0] for g in granted] == ["INSERT", "SELECT"]
+        assert db.execute("SELECT rolcanlogin FROM pg_roles WHERE rolname = %s", (role,)).fetchone()[0]
+        assert main(["setup", "--grant-to", role]) == 0  # again: the password is reset, nothing fails
         db.execute("DROP TRIGGER audit_events_no_truncate ON audit_events")
         app_mod.connect(Settings(database_url=url_of(db), setup=False)).close()
         assert (
@@ -157,5 +159,6 @@ def test_setup_grants_the_writer_role_and_the_writer_skips_setup(
             == 0
         )  # not set up again by a writer
     finally:
-        db.execute(f"DROP OWNED BY {role}")
-        db.execute(f"DROP ROLE {role}")
+        if db.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone():
+            db.execute(f"DROP OWNED BY {role}")
+        db.execute(f"DROP ROLE IF EXISTS {role}")

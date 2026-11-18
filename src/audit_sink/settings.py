@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Create the tables and triggers on start. Turn off when the sink runs as a writer role that
     # may only add rows (`audit-sink setup --grant-to <role>`, run as the tables' owner).
     setup: bool = True
+    # With `setup --grant-to`: the writer's login password, so the owner creates (or resets) the role.
+    writer_password: str = ""
     # Object storage (S3 API: AWS S3, MinIO, Ceph, GCS interoperability): the backup.
     archive_bucket: str = ""
     archive_prefix: str = "audit/"

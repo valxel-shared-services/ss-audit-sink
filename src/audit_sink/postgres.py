@@ -91,14 +91,21 @@ def setup(conn: psycopg.Connection[Any]) -> None:
             conn.execute(stmt)
 
 
-def grant(conn: psycopg.Connection[Any], role: str) -> None:
+def grant(conn: psycopg.Connection[Any], role: str, password: str = "") -> None:
     """What the sink's writer role may do, and nothing more: read and add audit rows, and mark a
     reject as replayed. The tables, triggers and this grant stay with their owner, so turning the
-    triggers off takes a different credential."""
+    triggers off takes a different credential. With a password, the role is created to log in
+    (or its password reset)."""
     from psycopg import sql
 
     who = sql.Identifier(role)
     with conn.transaction():
+        if password:
+            exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
+            verb = (
+                "ALTER ROLE {} WITH LOGIN PASSWORD {}" if exists else "CREATE ROLE {} WITH LOGIN PASSWORD {}"
+            )
+            conn.execute(sql.SQL(verb).format(who, sql.Literal(password)))
         conn.execute(sql.SQL("GRANT SELECT, INSERT ON audit_events TO {}").format(who))
         conn.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE (replayed_at) ON audit_rejects TO {}").format(who))
 

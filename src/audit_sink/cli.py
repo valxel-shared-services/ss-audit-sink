@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     conn = connect(settings.model_copy(update={"setup": True}) if args.cmd == "setup" else settings)
     if args.cmd == "setup":
         if args.grant_to:
-            postgres.grant(conn, args.grant_to)
+            postgres.grant(conn, args.grant_to, settings.writer_password)
         print("audit tables ready" + (f"; {args.grant_to} may add rows" if args.grant_to else ""))
         return 0
     if args.cmd == "verify":
