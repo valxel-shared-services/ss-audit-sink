@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -35,3 +36,25 @@ def test_the_schema_is_versioned_and_loads() -> None:
     s = schema()
     assert s["x-version"] == "1.0.0" and s["properties"]["type"]["const"] == "valxel.audit.v1"
     json.dumps(s)
+
+
+def test_a_product_holds_records_to_its_own_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import audit_sink.records as records
+
+    product = json.loads(json.dumps(schema()))
+    product["$defs"]["data"]["required"].append("reason")  # this product wants a reason on every record
+    f = tmp_path / "emr.audit.schema.json"
+    f.write_text(json.dumps(product))
+    monkeypatch.setenv("AUDIT_SINK_SCHEMA_FILE", str(f))
+    records._validator.cache_clear()
+    try:
+        bare = event()
+        del bare["data"]["reason"]
+        assert any("reason" in p for p in problems(bare))
+        assert problems(event()) == []
+    finally:
+        monkeypatch.delenv("AUDIT_SINK_SCHEMA_FILE")
+        records._validator.cache_clear()
+    bare = event()
+    del bare["data"]["reason"]
+    assert problems(bare) == []  # the platform's default doesn't require it

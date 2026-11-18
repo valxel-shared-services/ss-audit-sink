@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     destinations: list[str] = Field(default_factory=lambda: ["postgres", "archive"])
     # Postgres: the queryable, hash-chained copy.
     database_url: str = ""
+    # The product's own audit contract (its governance repo's contracts/audit/ schema, mounted here);
+    # empty: the platform's default. Read when the sink starts (records.schema()).
+    schema_file: str = ""
     # Create the tables and triggers on start. Turn off when the sink runs as a writer role that
     # may only add rows (`audit-sink setup --grant-to <role>`, run as the tables' owner).
     setup: bool = True

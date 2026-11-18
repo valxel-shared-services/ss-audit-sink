@@ -12,14 +12,20 @@ from typing import Any
 EVENT_TYPE = "valxel.audit.v1"
 # Producers from before the Vrixel -> Valxel rename still send the old type; both are the same schema.
 EVENT_TYPES = (EVENT_TYPE, "vrixel.audit.v1")
-# The event's contract. The sink owns it; every producer keeps a byte-identical copy at
-# contracts/audit/valxel.audit.v1.schema.json and tests its events against it, and the Valxel SDLC
-# checks daily that each copy is this one (its template contract, audit_event).
+# The event's contract. This is the platform's: the platform's own components and the templates keep
+# byte-identical copies, and a new product starts from it. A product owns its own copy in its
+# governance repo (contracts/audit/) and may change it; its sink then validates against that copy
+# (AUDIT_SINK_SCHEMA_FILE), and its components are held to it, never to this one.
 SCHEMA_FILE = "valxel.audit.v1.schema.json"
 
 
 def schema() -> dict[str, Any]:
-    loaded: dict[str, Any] = json.loads((Path(__file__).parent / SCHEMA_FILE).read_text(encoding="utf-8"))
+    """The audit contract this sink holds records to: the product's own (AUDIT_SINK_SCHEMA_FILE, from
+    the product's governance repo, contracts/audit/), or the platform's default shipped here."""
+    import os
+
+    path = os.environ.get("AUDIT_SINK_SCHEMA_FILE") or str(Path(__file__).parent / SCHEMA_FILE)
+    loaded: dict[str, Any] = json.loads(Path(path).read_text(encoding="utf-8"))
     return loaded
 
 
