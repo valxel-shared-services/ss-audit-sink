@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import cache
-from importlib import resources
+from pathlib import Path
 from typing import Any
 
 EVENT_TYPE = "valxel.audit.v1"
