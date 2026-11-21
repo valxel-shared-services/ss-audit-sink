@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     kafka_config: dict[str, str] = Field(default_factory=dict)  # security.protocol, sasl.* ...
     topics: list[str] = Field(default_factory=lambda: ["audit.v1"])
     group_prefix: str = "audit-sink"
-    # Which destinations this process writes: postgres, archive, or both.
+    # Which destinations this process writes: postgres, archive, forward (the customer's SIEM).
     destinations: list[str] = Field(default_factory=lambda: ["postgres", "archive"])
     # Postgres: the queryable, hash-chained copy.
     database_url: str = ""
@@ -36,5 +36,14 @@ class Settings(BaseSettings):
     archive_retention_days: int = 2190  # six years, the HIPAA documentation period
     archive_batch_events: int = 5000  # write a file when a partition has this many records,
     archive_batch_seconds: int = 300  # or when its oldest unwritten record is this old
+    # The customer's SIEM (forward.py): splunk or webhook, its URL and token (a secret reference).
+    forward_kind: str = "webhook"
+    forward_url: str = ""
+    forward_token: str = ""
+    forward_auth_header: str = ""  # default Authorization: Bearer <token>; DD-API-KEY for Datadog
+    forward_signing_key: str = ""  # HMAC-SHA256 of each body, X-Valxel-Signature
+    forward_workspaces: list[str] = Field(default_factory=list)  # only these workspaces' records
+    forward_unscoped: bool = False  # with forward_workspaces: also records naming no workspace
+    forward_batch: int = 500
     poll_batch: int = 500
     port: int = 8080

@@ -15,6 +15,7 @@ from typing import Any, Protocol
 from prometheus_client import Counter, Gauge
 
 from .archive import ArchiveSink
+from .forward import ForwardSink
 from .postgres import PostgresSink
 from .records import Record
 
@@ -86,6 +87,35 @@ class ArchiveDestination:
             EVENTS.labels(self.name, "written").inc(n)
             done[p] = last + 1
         return done
+
+
+class ForwardDestination:
+    """The customer's SIEM (forward.py): offsets move only once it accepted every wanted record."""
+
+    name = "forward"
+
+    def __init__(self, sink: ForwardSink) -> None:
+        self.sink = sink
+        self.buffer: list[Record] = []  # kept across a failed attempt
+
+    def handle(self, records: list[Record]) -> Offsets:
+        self.buffer += records
+        if not self.buffer:
+            return {}
+        events, bad = self.sink.events(self.buffer)
+        self.sink.send(events)
+        EVENTS.labels(self.name, "written").inc(len(events))
+        EVENTS.labels(self.name, "rejected").inc(bad)
+        done: Offsets = {}
+        for r in self.buffer:
+            done[(r.topic, r.partition)] = max(done.get((r.topic, r.partition), 0), r.offset + 1)
+        self.buffer = []
+        return done
+
+    def revoked(self, partitions: list[tuple[str, int]]) -> Offsets:
+        gone = set(partitions)
+        self.buffer = [r for r in self.buffer if (r.topic, r.partition) not in gone]
+        return {}
 
 
 class Worker:

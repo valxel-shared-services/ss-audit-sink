@@ -1,6 +1,7 @@
 # Audit sink
 
-A Valxel shared service. It reads a product's audit topic from Kafka and keeps two copies:
+A Valxel shared service. It reads a product's audit topic from Kafka and keeps two copies, and can
+send a third to the customer's own SIEM (below):
 
 - **Postgres**: queryable, append-only and hash-chained, for investigations and access reports.
 - **Object storage**: gzipped files under S3 Object Lock, the backup that no one can delete before
@@ -98,10 +99,32 @@ uv run audit-sink replay-rejects --topic emr.audit.v1   # publish them again: th
 | `AUDIT_SINK_ARCHIVE_LOCK_MODE` | `COMPLIANCE` | `GOVERNANCE`, or empty to use the bucket's default |
 | `AUDIT_SINK_ARCHIVE_RETENTION_DAYS` | `2190` | |
 | `AUDIT_SINK_ARCHIVE_BATCH_EVENTS`, `AUDIT_SINK_ARCHIVE_BATCH_SECONDS` | `5000`, `300` | A partition's file is written when either is reached |
+| `AUDIT_SINK_FORWARD_KIND` | `webhook` | `splunk` (HTTP Event Collector) or `webhook` (a JSON array per batch) |
+| `AUDIT_SINK_FORWARD_URL`, `AUDIT_SINK_FORWARD_TOKEN` | | The customer's SIEM endpoint (https) and its token (a secret reference) |
+| `AUDIT_SINK_FORWARD_AUTH_HEADER` | `Authorization` (Bearer) | e.g. `DD-API-KEY` for Datadog's log intake |
+| `AUDIT_SINK_FORWARD_SIGNING_KEY` | | Signs each body: `X-Valxel-Signature: sha256=<HMAC>` |
+| `AUDIT_SINK_FORWARD_WORKSPACES`, `AUDIT_SINK_FORWARD_UNSCOPED` | `[]`, `false` | Only these workspaces' records (the tool's own sink serves many customers); records naming none too |
 
 Metrics: `audit_sink_records_total{destination,result}` (written, rejected, duplicate),
 `audit_sink_failures_total{destination}`, `audit_sink_last_success_timestamp_seconds{destination}`.
 Alert when a destination hasn't succeeded for longer than its batch interval, and on consumer lag.
+
+## The customer's SIEM
+
+Add `forward` to `AUDIT_SINK_DESTINATIONS` and each record also goes to the customer's security
+monitoring (Splunk, Sentinel through a Logic App or Function, Datadog, Elastic, their own
+collector), from a consumer group of its own (`<prefix>-forward`): a SIEM that is down holds up
+neither Postgres nor the archive, and Kafka keeps its records until it is back. Delivery is at
+least once; the event `id` lets the SIEM drop a repeat. See `src/audit_sink/forward.py`.
+
+## How long records are kept
+
+| Copy | Kept | |
+| --- | --- | --- |
+| Kafka topic | the topic's retention (seven days at least) | the buffer while a destination is down |
+| Archive (Object Lock) | `AUDIT_SINK_ARCHIVE_RETENTION_DAYS`, six years by default (HIPAA's documentation period) | can't be deleted or changed before then, in `COMPLIANCE` mode not even by the bucket's owner; set a lifecycle rule to delete after |
+| Postgres | everything; nothing prunes it yet | the searchable copy; `restore` rebuilds it from the archive |
+| The customer's SIEM | the customer's own policy | |
 
 ## Tests
 
