@@ -129,6 +129,7 @@ def test_rejects_that_are_audit_events_are_replayed_once(
     assert postgres.replayable(db, "audit.v1") == []
     # When the sink reads it back at its new offset, it joins the chain.
     sink.write([record(9, up.sent[0])])
+    monkeypatch.delenv("AUDIT_SINK_ARCHIVE_BUCKET")  # the chain alone; anchors are test_anchors.py's
     assert main(["verify"]) == 0
 
 

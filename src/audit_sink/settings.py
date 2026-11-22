@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     archive_retention_days: int = 2190  # six years, the HIPAA documentation period
     archive_batch_events: int = 5000  # write a file when a partition has this many records,
     archive_batch_seconds: int = 300  # or when its oldest unwritten record is this old
+    # Anchors (anchors.py): each partition's chain head under Object Lock in the archive bucket,
+    # every this many seconds while `run` writes to Postgres (0: only by `audit-sink anchor`).
+    anchor_prefix: str = "anchors/"
+    anchor_interval_s: int = 3600
     # The customer's SIEM (forward.py): splunk or webhook, its URL and token (a secret reference).
     forward_kind: str = "webhook"
     forward_url: str = ""

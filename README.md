@@ -46,6 +46,12 @@ reason, and archived as sent; nothing is dropped.
 - Each row's `hash` is SHA-256 over the previous row's hash in the same partition, the row's
   Kafka coordinates and the event, so a changed, missing or reordered row breaks the chain from
   there on. `GET /verify` and `audit-sink verify` recompute every partition's chain.
+- The tables' owner could still turn the triggers off, rewrite rows and recompute every later
+  hash, and the chain alone would verify. So each partition's head (last offset and its hash) is
+  written to the archive bucket under Object Lock, `anchors/<topic>/partition=<n>/<time>.json`:
+  `audit-sink run` does it every `AUDIT_SINK_ANCHOR_INTERVAL_S` (default an hour), and
+  `audit-sink anchor` does it once. `audit-sink verify` checks every anchored row is still there
+  with its anchored hash. Rows written since the last anchor have the chain's protection only.
 - Triggers refuse `UPDATE`, `DELETE` and `TRUNCATE` on `audit_events`. Keep table ownership with
   a separate role and run the sink as a writer that may only add rows, so disabling the triggers
   takes a different credential: as the owner, `audit-sink setup --grant-to <writer>`; then run the
@@ -77,7 +83,8 @@ SELECT time, service, action, actor_id, event->'data'->>'reason' FROM audit_even
 uv sync
 uv run audit-sink setup      # create the tables and triggers (run also does this)
 uv run audit-sink run        # consume; serves /healthz, /readyz, /metrics, /verify on :8080
-uv run audit-sink verify     # exits 1 if any partition's chain is broken
+uv run audit-sink verify     # exits 1 if any partition's chain is broken or contradicts its anchors
+uv run audit-sink anchor     # write each partition's chain head under Object Lock
 uv run audit-sink restore --topic emr.audit.v1   # rebuild Postgres from the archive
 uv run audit-sink replay-rejects --topic emr.audit.v1 --dry-run   # how many rejects are audit events after all
 uv run audit-sink replay-rejects --topic emr.audit.v1   # publish them again: they join the chain at new offsets

@@ -2,7 +2,8 @@
 
 run       consume the audit topics into the configured destinations (the container's command)
 setup     create the Postgres tables and append-only triggers
-verify    recompute every partition's hash chain; exits 1 on a break
+verify    recompute every partition's hash chain, and check it against its anchors; exits 1 on a break
+anchor    write each partition's chain head under Object Lock (anchors.py); run it hourly
 restore   replay a topic from the object-storage archive into Postgres (rows already there are
           skipped), e.g. after losing the database
 replay-rejects
@@ -29,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("setup")
     sp.add_argument("--grant-to", default="", help="a writer role that may only add audit rows")
     sub.add_parser("verify")
+    sub.add_parser("anchor")
     r = sub.add_parser("restore")
     r.add_argument("--topic", required=True)
     rp = sub.add_parser("replay-rejects")
@@ -37,13 +39,25 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format='{"log.level":"%(levelname)s","message":"%(message)s"}')
     settings = Settings()
-    from .app import archive_sink, build_workers, connect, create_app
+    from .app import anchors_for, archive_sink, build_workers, connect, create_app
 
     if args.cmd == "run":  # pragma: no cover - exercised by the container
+        import threading
+
         import uvicorn
+
+        from . import anchors
 
         workers = build_workers(settings)
         verify_conn = connect(settings) if "postgres" in settings.destinations else None
+        store = anchors_for(settings) if verify_conn is not None else None
+        if store is not None and settings.anchor_interval_s > 0:
+            threading.Thread(
+                target=anchors.loop,
+                args=(threading.Event(), lambda: connect(settings), store, settings.anchor_interval_s),
+                daemon=True,
+                name="anchors",
+            ).start()
         uvicorn.run(
             create_app(workers, verify_conn=verify_conn),
             host="0.0.0.0",  # noqa: S104 - a container listens on all interfaces
@@ -57,11 +71,24 @@ def main(argv: list[str] | None = None) -> int:
             postgres.grant(conn, args.grant_to, settings.writer_password)
         print("audit tables ready" + (f"; {args.grant_to} may add rows" if args.grant_to else ""))
         return 0
+    if args.cmd == "anchor":
+        from .anchors import anchor_all
+
+        store = anchors_for(settings)
+        if store is None:
+            print("no archive bucket (AUDIT_SINK_ARCHIVE_BUCKET): nowhere to anchor")
+            return 1
+        print(f"anchored {anchor_all(conn, store)} partition heads")
+        return 0
     if args.cmd == "verify":
+        from .anchors import check
+
         ok = True
+        store = anchors_for(settings)
         for topic, partition in postgres.partitions(conn):
             n, broken = postgres.verify(conn, topic, partition)
-            ok = ok and broken is None
+            against = list(check(conn, store, topic, partition)) if store is not None else None
+            ok = ok and broken is None and not against
             print(
                 json.dumps(
                     {
@@ -69,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
                         "partition": partition,
                         "checked": n,
                         "break": broken.__dict__ if broken else None,
+                        "anchors": "not configured" if against is None else (against or "consistent"),
                     }
                 )
             )
