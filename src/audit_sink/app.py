@@ -64,18 +64,37 @@ def connect(settings: Settings) -> Any:
     return conn
 
 
-def archive_sink(settings: Settings) -> Any:
+def s3_client(settings: Settings) -> Any:
     import boto3
 
-    from .archive import ArchiveSink
-
-    if not settings.archive_bucket:
-        raise RuntimeError("Set AUDIT_SINK_ARCHIVE_BUCKET")
-    s3 = boto3.client(
+    return boto3.client(
         "s3",
         endpoint_url=settings.archive_endpoint_url or None,
         region_name=settings.archive_region or None,
     )
+
+
+def anchors_for(settings: Settings, s3: Any = None) -> Any:
+    """The chain heads' store (anchors.py): the archive bucket, under its own prefix. None without one."""
+    from .anchors import Anchors
+
+    if not settings.archive_bucket:
+        return None
+    return Anchors(
+        s3 if s3 is not None else s3_client(settings),
+        settings.archive_bucket,
+        prefix=settings.anchor_prefix,
+        lock_mode=settings.archive_lock_mode,
+        retention_days=settings.archive_retention_days,
+    )
+
+
+def archive_sink(settings: Settings) -> Any:
+    from .archive import ArchiveSink
+
+    if not settings.archive_bucket:
+        raise RuntimeError("Set AUDIT_SINK_ARCHIVE_BUCKET")
+    s3 = s3_client(settings)
     return ArchiveSink(
         s3,
         settings.archive_bucket,
