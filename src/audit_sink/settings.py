@@ -27,8 +27,9 @@ class Settings(BaseSettings):
     setup: bool = True
     # With `setup --grant-to`: the writer's login password, so the owner creates (or resets) the role.
     writer_password: str = ""
-    # Object storage: the backup. s3 (the S3 API: AWS S3, MinIO, Ceph) or gcs (Cloud Storage with
-    # per-object retention, gcs.py), matching the installation's cloud.
+    # Object storage: the backup. s3 (the S3 API: AWS S3, MinIO, Ceph), gcs (Cloud Storage with
+    # per-object retention, gcs.py) or azure (Blob Storage with version-level immutability,
+    # azure_blob.py; the bucket is the container's URL), matching the installation's cloud.
     archive_provider: str = "s3"
     archive_bucket: str = ""
     archive_prefix: str = "audit/"
