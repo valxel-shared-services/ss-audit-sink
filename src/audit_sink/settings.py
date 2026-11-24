@@ -27,7 +27,9 @@ class Settings(BaseSettings):
     setup: bool = True
     # With `setup --grant-to`: the writer's login password, so the owner creates (or resets) the role.
     writer_password: str = ""
-    # Object storage (S3 API: AWS S3, MinIO, Ceph, GCS interoperability): the backup.
+    # Object storage: the backup. s3 (the S3 API: AWS S3, MinIO, Ceph) or gcs (Cloud Storage with
+    # per-object retention, gcs.py), matching the installation's cloud.
+    archive_provider: str = "s3"
     archive_bucket: str = ""
     archive_prefix: str = "audit/"
     archive_endpoint_url: str = ""  # MinIO or another S3-compatible store; empty for AWS

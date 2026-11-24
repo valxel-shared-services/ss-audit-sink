@@ -8,7 +8,8 @@ record (coordinates plus the event exactly as sent, including any that aren't va
 Each file is written with S3 Object Lock (retention set from AUDIT_SINK_ARCHIVE_RETENTION_DAYS),
 so in COMPLIANCE mode no one, including the account's administrators, can delete or overwrite it
 before then. The bucket needs Object Lock enabled (which also turns on versioning). Any S3 API
-store works: AWS S3, MinIO, Ceph; `restore` replays the files into Postgres.
+store works: AWS S3, MinIO, Ceph; and Cloud Storage through gcs.py (AUDIT_SINK_ARCHIVE_PROVIDER=gcs),
+where the lock is per-object retention. `restore` replays the files into Postgres.
 """
 
 from __future__ import annotations

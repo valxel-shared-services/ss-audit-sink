@@ -65,6 +65,13 @@ def connect(settings: Settings) -> Any:
 
 
 def s3_client(settings: Settings) -> Any:
+    """The archive's store, as an S3 client: S3 itself, or Cloud Storage behind the same calls."""
+    if settings.archive_provider == "gcs":
+        from .gcs import GcsAsS3
+
+        return GcsAsS3()
+    if settings.archive_provider != "s3":
+        raise RuntimeError(f"AUDIT_SINK_ARCHIVE_PROVIDER is s3 or gcs, not {settings.archive_provider!r}")
     import boto3
 
     return boto3.client(
