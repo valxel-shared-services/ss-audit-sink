@@ -95,5 +95,5 @@ def test_the_provider_setting_picks_the_store(monkeypatch: pytest.MonkeyPatch) -
         gcs_mod.GcsAsS3, "__init__", lambda self, client=None: setattr(self, "client", "fake")
     )
     assert isinstance(s3_client(Settings(archive_provider="gcs")), GcsAsS3)
-    with pytest.raises(RuntimeError, match="s3 or gcs"):
-        s3_client(Settings(archive_provider="azure"))
+    with pytest.raises(RuntimeError, match="s3, gcs or azure"):
+        s3_client(Settings(archive_provider="oracle"))

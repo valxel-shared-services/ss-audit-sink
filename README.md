@@ -101,7 +101,7 @@ uv run audit-sink replay-rejects --topic emr.audit.v1   # publish them again: th
 | `AUDIT_SINK_SCHEMA_FILE` | | The product's audit schema (its governance repo's `contracts/audit/`); unset, the platform's |
 | `AUDIT_SINK_SETUP` | `true` | Create tables and triggers on start; `false` for a writer role |
 | `AUDIT_SINK_WRITER_PASSWORD` | | With `setup --grant-to`: creates the writer as a login role (or resets its password) |
-| `AUDIT_SINK_ARCHIVE_PROVIDER` | `s3` | `gcs` for Cloud Storage: the bucket needs per-object retention enabled; `COMPLIANCE` is written as Locked retention, `GOVERNANCE` as Unlocked (`gcs.py`) |
+| `AUDIT_SINK_ARCHIVE_PROVIDER` | `s3` | `gcs` for Cloud Storage: the bucket needs per-object retention enabled; `COMPLIANCE` is written as Locked retention, `GOVERNANCE` as Unlocked (`gcs.py`). `azure` for Blob Storage: the bucket is the container's URL, the container needs version-level immutability; the same two modes (`azure_blob.py`) |
 | `AUDIT_SINK_ARCHIVE_BUCKET`, `AUDIT_SINK_ARCHIVE_PREFIX` | `audit/` | S3 API bucket (AWS S3, MinIO, Ceph), or a Cloud Storage bucket |
 | `AUDIT_SINK_ARCHIVE_ENDPOINT_URL`, `AUDIT_SINK_ARCHIVE_REGION` | | For MinIO and other S3-compatible stores; credentials come from the standard AWS variables or workload identity |
 | `AUDIT_SINK_ARCHIVE_LOCK_MODE` | `COMPLIANCE` | `GOVERNANCE`, or empty to use the bucket's default |
